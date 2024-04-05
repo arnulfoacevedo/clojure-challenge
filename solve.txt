@@ -1,0 +1,84 @@
+problem 1:
+(defn filter-invoice-items [invoice]
+  (->> invoice
+       :invoice/items
+       (filter (fn [item]
+                 (let [iva-19? (some #(= 19 (:tax/rate %)) (get-in item [:taxable/taxes]))
+                       retention-1? (some #(= 1 (:retention/rate %)) (get-in item [:retentionable/retentions]))]
+                   (xor iva-19? retention-1?))))
+       (into [])))
+
+(filter-invoice-items invoice)
+
+
+-----------------------------------------
+problem 2:
+(ns your-namespace
+  (:require [clojure.spec.alpha :as s]
+            [clojure.spec.gen.alpha :as gen]
+            [cheshire.core :as json]
+            [clojure.java.io :as io]))
+
+;; Load the invoice spec from invoice-spec.clj
+(load-file "invoice-spec.clj")
+
+;; Define a function to read the JSON file, parse it, and validate it against the spec
+(defn validate-invoice [file-name]
+  (let [invoice-json (-> file-name
+                        io/resource
+                        slurp
+                        (json/parse-string true))
+        invoice-spec ::invoice]
+    (if (s/valid? invoice-spec invoice-json)
+      invoice-json
+
+-------------------------------------------
+problem 3:
+(ns invoice-item-test
+  (:require [clojure.test :refer :all]
+            [invoice-item :refer :all]))
+
+(deftest test-subtotal-no-discount
+  (testing "Subtotal without discount"
+    (is (= 0 (subtotal {:invoice-item/precise-quantity 0
+                        :invoice-item/precise-price 100})))
+    (is (= 200 (subtotal {:invoice-item/precise-quantity 2
+                          :invoice-item/precise-price 100})))))
+
+(deftest test-subtotal-with-discount
+  (testing "Subtotal with discount"
+    (is (= 90 (subtotal {:invoice-item/precise-quantity 1
+                         :invoice-item/precise-price 100
+                         :invoice-item/discount-rate 10})))
+    (is (= 180 (subtotal {:invoice-item/precise-quantity 2
+                          :invoice-item/precise-price 100
+                          :invoice-item/discount-rate 10})))))
+
+(deftest test-subtotal-zero-quantity
+  (testing "Subtotal with zero quantity"
+    (is (= 0 (subtotal {:invoice-item/precise-quantity 0
+                        :invoice-item/precise-price 100
+                        :invoice-item/discount-rate 10})))))
+
+(deftest test-subtotal-zero-price
+  (testing "Subtotal with zero price"
+    (is (= 0 (subtotal {:invoice-item/precise-quantity 1
+                        :invoice-item/precise-price 0
+                        :invoice-item/discount-rate 10})))))
+
+(deftest test-subtotal-100-percent-discount
+  (testing "Subtotal with 100% discount"
+    (is (= 0 (subtotal {:invoice-item/precise-quantity 1
+                        :invoice-item/precise-price 100
+                        :invoice-item/discount-rate 100})))))
+
+(deftest test-subtotal-negative-quantities-and-prices
+  (testing "Subtotal with negative quantities and prices"
+    (is (= -90 (subtotal {:invoice-item/precise-quantity -1
+                          :invoice-item/precise-price -100
+                          :invoice-item/discount-rate 10})))
+    (is (= -180 (subtotal {:invoice-item/precise-quantity -2
+                           :invoice-item/precise-price -100
+                           :invoice-item/discount-rate 10})))))
+
+(run-tests 'invoice-item-test)
